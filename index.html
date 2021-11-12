@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+<!-- apiNodes - index.html -->
+<meta charset="utf-8" />
+
+
+<!-- JQUERY -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+<script src='./js/telosAPI.js'></script>
+
+
+<script type="text/javascript">
+
+var tlos_Price = null;
+var tlos_Mk_Cap = null;
+var tlos_created_bal = null;
+var tlos_circ_bal = null;
+var tlos_EVM_bal = null;
+var tlos_EVM_Mk_Cap = null;
+
+var culm_swaps_TLOS      = 0.0;
+var culm_ptokens_TLOS   = 0.0;
+var culm_tbn_TLOS       = 0.0;
+var culm_kucoin_TLOS    = 0.0;
+var culm_probit_TLOS    = 0.0;
+var culm_newdex_TLOS    = 0.0;
+
+var all_usercount = null;
+var new_24hr_accounts = null;
+var current_block_num = null;
+
+var incrSuc = 0;
+var crit_Error = false;
+
+function right(str, chr) { return str.slice(str.length-chr,str.length); }
+function left(str, chr) { return str.slice(0, chr - str.length); }
+
+function finCallEnd() {
+    
+    if(crit_Error) {
+        
+        $("#dt_report").val("ERROR -1001 !!!");
+        return;
+    }
+    
+    if(incrSuc === 8) {
+        printReport();
+    } else {
+        
+        $("#dt_report").val("ERROR -1002 !!!");
+        return;
+    }
+}
+
+
+$( document ).ready(function() {
+    
+    $("#btn_gen_report").click(function(){
+        
+        $("#dt_report").val("");
+   
+        //get price from https://telos.bloks.io/
+        $.ajax({
+            url: "https://www.api.bloks.io/telos/ticker/%5Bobject%20Object%5D",
+            type: 'GET',
+            success: function(data, status){
+                tlos_Price = parseFloat(data);
+                
+                //get total supply of all created TLOS
+                // used to calculate tlos_Mk_Cap
+                tlos_get_table_rows("eosio.token", 1, "1397705812", "stat", "", "", function(data) {
+                    
+                    tlos_created_bal = parseFloat(data.data.rows[0].supply.split(" ")[0]);
+                    tlos_Mk_Cap = tlos_created_bal * tlos_Price;
+                    incrSuc++;
+                    
+                },
+                function(data) { crit_Error = true;  }
+                );
+            },
+            error: function(data) {
+                crit_Error = true; 
+            }
+        });
+        
+        setTimeout(function() {
+            //get Circ Supply https://api.telos.net/v1/supply/circulating?requestor=any
+            $.ajax({
+                url: "https://api.telos.net/v1/supply/circulating?requestor=any",
+                type: 'GET',
+                success: function(data, status){
+                    tlos_circ_bal = parseFloat(data);
+                    incrSuc++;
+                },
+                error: function(data) {
+                    crit_Error = true; 
+                }
+            });
+            
+            telos_get_balance(
+                "eosio.token",
+                "TLOS",
+                "eosio.evm",
+                function(data) {
+                    tlos_EVM_bal = parseFloat(data.data[0].split(" ")[0]);
+                    tlos_EVM_Mk_Cap = tlos_Price * tlos_EVM_bal;
+                    incrSuc++;
+                },
+                function() { crit_Error = true; }
+            );
+        }, 1500);
+        
+        setTimeout(function() {
+            
+            //https://www.api.bloks.io/telos/tokens?type=topHolders&chain=telos&contract=eosio.token&symbol=TLOS&limit=5000
+            $.ajax({
+                url: "https://www.api.bloks.io/telos/tokens?type=topHolders&chain=telos&contract=eosio.token&symbol=TLOS&limit=500",
+                type: 'GET',
+                success: function(data, status){
+                    var account = null;
+                    var bal = 0.0;
+                    
+                    for(var i=0; i < data.length; i++) {
+                        account = data[i][0];
+                        bal = parseFloat(data[i][1]);
+                        
+                        if(right(account, 6) === ".swaps") {
+                            culm_swaps_TLOS = culm_swaps_TLOS + bal;
+                        }
+                        
+                        if(right(account, 8) === ".ptokens") {
+                            culm_ptokens_TLOS = culm_ptokens_TLOS + bal;
+                        }
+                        
+                        if(right(account, 4) === ".tbn") {
+                            culm_tbn_TLOS = culm_tbn_TLOS + bal;
+                        }
+                        
+                        if(left(account, 6) === "probit") {
+                            culm_probit_TLOS = culm_probit_TLOS + bal;
+                        }
+                    }
+                    
+                    incrSuc++;
+                },
+                error: function(data) {
+                    crit_Error = true; 
+                }
+            });
+            
+            telos_get_balance(
+                "eosio.token",
+                "TLOS",
+                "kucoinriseup",
+                function(data) {
+                    culm_kucoin_TLOS = parseFloat(data.data[0].split(" ")[0]);
+                    incrSuc++;
+                },
+                function() {crit_Error = true; }
+            );
+            
+            
+            setTimeout(function(){
+                telos_get_balance(
+                    "eosio.token",
+                    "TLOS",
+                    "newdex",
+                    function(data) {
+                        culm_newdex_TLOS = parseFloat(data.data[0].split(" ")[0]);
+                        incrSuc++;
+                    },
+                    function() {crit_Error = true; }
+                );
+            }, 1000);
+            
+        }, 2500);
+        
+        
+        setTimeout(function() {
+            $.ajax({
+                url: "https://www.api.bloks.io/telos/usercount?type=latest",
+                type: 'GET',
+                success: function(data, status){
+                    
+                    all_usercount = parseInt(data.count);
+                    new_24hr_accounts = parseInt(data.change_24hr);
+                    incrSuc++;
+                },
+                error: function(data) {
+                    crit_Error = true; 
+                }
+            });
+            
+            $.ajax({
+                url: "https://www.api.bloks.io/telos/tps/%5Bobject%20Object%5D",
+                type: 'GET',
+                success: function(data, status){
+                    
+                    current_block_num = parseInt(data.block);
+                    incrSuc++;
+                    
+                    setTimeout(function(){ finCallEnd(); }, 1000);
+                },
+                error: function(data) {
+                    crit_Error = true; 
+                }
+            });
+            
+            
+            
+        }, 3500);
+        
+    }); 
+
+});
+
+function perc(n, d) {
+    
+    var fPerc = n / d;
+    fPerc = fPerc * 100;
+    
+    var sPerc = fPerc.toFixed(1);
+    
+    return sPerc + "%";
+}
+
+
+function printReport() {
+    var str = "# Daily Telos Report";
+    
+    str = str + "\nAs of block #: " + current_block_num;
+    str = str + "\nNew Accounts in Past 24 Hours: **" + new_24hr_accounts + "**";
+    str = str + "\nTotal Users: " + all_usercount.toLocaleString("en-US", {maximumFractionDigits: 0});;
+    str = str + "\n---";
+    
+    str = str + "\n## Capital Metrics";
+    str = str + "\nTelos Price (USD): $" + tlos_Price.toLocaleString("en-US", {maximumFractionDigits: 3});
+    str = str + "\nTelos Market Cap (USD): **$" + tlos_Mk_Cap.toLocaleString("en-US", {maximumFractionDigits: 0}) + "**";
+    str = str + "\nEVM Market Cap (USD): **$" + tlos_EVM_Mk_Cap.toLocaleString("en-US", {maximumFractionDigits: 0}) + "**";
+    str = str + "\n---";
+    
+    str = str + "\n## Liquid TLOS Metrics";
+    str = str + "\nTotal Circulating Supply: **" + tlos_circ_bal.toLocaleString("en-US", {maximumFractionDigits: 0}) + " TLOS**";
+    str = str + "\n&nbsp;";
+    str = str + "\nTop 500 *.ptokens: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + culm_ptokens_TLOS.toLocaleString("en-US", {maximumFractionDigits: 0}) + " TLOS &nbsp;&nbsp;&nbsp; " + perc(culm_ptokens_TLOS, tlos_circ_bal);
+    str = str + "\nTop 500 Probit: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + culm_probit_TLOS.toLocaleString("en-US", {maximumFractionDigits: 0}) + " TLOS &nbsp;&nbsp;&nbsp; " + perc(culm_probit_TLOS, tlos_circ_bal);
+    str = str + "\nEVM Balance: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + tlos_EVM_bal.toLocaleString("en-US", {maximumFractionDigits: 0}) + " TLOS &nbsp;&nbsp;&nbsp; " + perc(tlos_EVM_bal, tlos_circ_bal);
+    str = str + "\nTop 500 *.swaps: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + culm_swaps_TLOS.toLocaleString("en-US", {maximumFractionDigits: 0}) + " TLOS &nbsp;&nbsp;&nbsp; " + perc(culm_swaps_TLOS, tlos_circ_bal);
+    str = str + "\nTop 500 *.tbn: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + culm_tbn_TLOS.toLocaleString("en-US", {maximumFractionDigits: 0}) + " TLOS &nbsp;&nbsp;&nbsp; " + perc(culm_tbn_TLOS, tlos_circ_bal);
+    str = str + "\nBalance newdex:  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + culm_newdex_TLOS.toLocaleString("en-US", {maximumFractionDigits: 0}) + " TLOS &nbsp;&nbsp;&nbsp; " + perc(culm_newdex_TLOS, tlos_circ_bal);
+    str = str + "\nBalance kucoinriseup: " + culm_kucoin_TLOS.toLocaleString("en-US", {maximumFractionDigits: 0}) + " TLOS &nbsp;&nbsp;&nbsp; " + perc(culm_kucoin_TLOS, tlos_circ_bal);
+    str = str + "\n---";
+    
+    str = str + "\n## Latest News";
+    str = str + "\n||goldsmith.money| Newdex ||";
+    str = str + "\n---";
+    
+    $("#dt_report").val(str);
+}
+
+</script>
+<!--
+
+
+var tlos_Price = null;
+var tlos_Mk_Cap = null;
+var tlos_created_bal = null;
+var tlos_circ_bal = null;
+var tlos_EVM_bal = null;
+var tlos_EVM_Mk_Cap = null;
+
+var culm_swaps_TLOS      = 0.0;
+var culm_ptokens_TLOS   = 0.0;
+var culm_tbn_TLOS       = 0.0;
+var culm_kucoin_TLOS    = 0.0;
+var culm_probit_TLOS    = 0.0;
+var culm_newdex_TLOS    = 0.0;
+
+var all_usercount = null;
+var new_24hr_accounts = null;
+var current_block_num = null;
+
+Daily Telos BP Report
+
+## Capital Metrics
+Telos Price (USD):
+Telos Market Cap (USD):
+EVM Market Cap (USD):
+  
+## TLOS Liquidity Metrics (Unstaked Only)
+Total Circulating Supply: 
+EVM Balance (TLOS):  (% of liquid)
+Top 500 *.swap -- 277,771.5186 TLOS (% of liquid)
+Top 500 *.ptokens -- 277,771.5186 TLOS (% of liquid)
+Top 500 *.tbn -- xxx.xxx TLOS (% of Liquid)
+kucoin* -- 277,771.5186 TLOS (% of liquid)
+probit* -- 277,771.5186 TLOS (% of liquid)
+newdex -- ... (% of liquid)
+
+Circulating Supply
+https://api.telos.net/v1/supply/circulating?requestor=any
+
+EVM Balance
+https://telos.bloks.io/account/eosio.evm
+
+## Activity Metrics
+New Accounts in Past 24 Hours:
+Current Block #:
+
+-->
+
+</head>
+<body>
+<div style="height: 50px; width: 100%;">&nbsp;</div>
+<div style="width: 80%; margin: auto;">
+<h1 style="margin: 0px; padding: 0px; color: #333;">Daily Telos - Report Generator API</h1>
+<span style="margin: 0px; margin-left: 25px; padding: 0px; font-size: 10pt;">by <a href="https://defi.tlccc.sg" style="color: #537eff; text-decoration: none;" target="_blank">TLCC Consultants Pte. Ltd.</a></span><br>
+<span style="margin: 0px; margin-left: 25px; padding: 0px; font-size: 10pt;">version 0.b20</span><br>
+<span style="margin: 0px; margin-left: 25px; padding: 0px; font-size: 10pt;">Copyright &#169; 2021 - <a href="https://mit-license.org/" style="color: #537eff; text-decoration: none;" target="_blank">MIT License</a></span>
+<hr style="border: 3px solid #333;">
+<p style="font-family: Tahoma; font-size: 11px;">View website here:&nbsp;<a href="https://dailytelos.net/" target="_blank">Daily Telos</a></p>
+<p style="font-family: Tahoma; font-size: 11px;">Uses various API data feeds to build.</p>
+<p>&nbsp;</p>
+<h2 style="margin: 0px; padding: 0px; color: #333;">Report Generation</h2>
+
+<textarea id="dt_report" name="dt_report" rows="10" cols="50">
+</textarea>
+<br><br>
+<button id="btn_gen_report">Generate</button>
+
+
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+</div>
+</body>
+</html>
